@@ -3,9 +3,10 @@ import tiktoken
 import requests
 import os
 import streamlit as st
+import fitz  # PyMuPDF for PDF handling
 
-# DEFAULT_API_KEY = os.environ.get("TOGETHER_API_KEY")
-DEFAULT_API_KEY = "bca883168d18f9277ca70639f50eb1d5f8106a259c11c8c0e8bd3af2ddaffefa"
+# Default settings
+DEFAULT_API_KEY = "your_key"
 DEFAULT_BASE_URL = "https://api.together.xyz/v1"
 DEFAULT_MODEL = "meta-llama/Llama-Vision-Free"
 DEFAULT_TEMPERATURE = 0.7
@@ -14,19 +15,18 @@ DEFAULT_TOKEN_BUDGET = 4096
 
 class ConversationManager:
     def __init__(self, api_key=None, base_url=None, model=None, temperature=None, max_tokens=None, token_budget=None):
+        # Initialization
         if not api_key:
             api_key = DEFAULT_API_KEY
         if not base_url:
             base_url = DEFAULT_BASE_URL
             
         self.client = OpenAI(api_key=api_key, base_url=base_url)
-
         self.model = model if model else DEFAULT_MODEL
         self.temperature = temperature if temperature else DEFAULT_TEMPERATURE
         self.max_tokens = max_tokens if max_tokens else DEFAULT_MAX_TOKENS
         self.token_budget = token_budget if token_budget else DEFAULT_TOKEN_BUDGET
-
-        self.system_message = "You are a friendly and supportive guide. You answer questions with kindness, encouragement, and patience, always looking to help the user feel comfortable and confident."  # Default persona
+        self.system_message = "You are an interviewer, asking insightful questions based on the provided document. Ask the question one at a time as to not overwhelm the user."
         self.conversation_history = [{"role": "system", "content": self.system_message}]
 
     def count_tokens(self, text):
@@ -99,9 +99,18 @@ def get_instance_id():
         return instance_id
     except requests.exceptions.RequestException:
         return "Instance ID not available (running locally or error in retrieval)"
+    
+# PDF Parsing Function
+def parse_pdf(file):
+    """Extract text from a PDF file using PyMuPDF."""
+    content = ""
+    with fitz.open(stream=file.read(), filetype="pdf") as pdf:
+        for page_num in range(len(pdf)):
+            content += pdf[page_num].get_text("text")
+    return content
 
 ### Streamlit code ###
-st.title("AI Chatbot")
+st.title("AI Interview Chatbot")
 
 # Display EC2 Instance ID
 instance_id = get_instance_id()
@@ -113,20 +122,29 @@ if 'chat_manager' not in st.session_state:
 
 chat_manager = st.session_state['chat_manager']
 
+# Initialize conversation history in session state
 if 'conversation_history' not in st.session_state:
     st.session_state['conversation_history'] = chat_manager.conversation_history
 
-conversation_history = st.session_state['conversation_history']
+# PDF Upload
+uploaded_file = st.file_uploader("Upload a PDF for interview content", type="pdf")
+if uploaded_file:
+    pdf_content = parse_pdf(uploaded_file)
+    # Add PDF content to conversation history without displaying it
+    chat_manager.conversation_history.append({
+        "role": "user", "content": f"Please analyze this content and act as an interviewer, the content is about me: {pdf_content}"
+    })
+    st.write("PDF content loaded. The chatbot is now ready to ask questions based on this document.")
 
-# Chat input from the user
+# Chat input
 user_input = st.chat_input("Write a message")
 
-# Call the chat manager to get a response from the AI
 if user_input:
     response = chat_manager.chat_completion(user_input)
+    st.session_state['conversation_history'] = chat_manager.conversation_history
 
-# Display the conversation history
-for message in conversation_history:
-    if message["role"] != "system":
+# Display conversation history, excluding the system message
+for message in st.session_state['conversation_history']:
+    if message["role"] != "system" and not message["content"].startswith("Please analyze this content"):
         with st.chat_message(message["role"]):
             st.write(message["content"])
