@@ -13,20 +13,30 @@ DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_TOKEN_BUDGET = 4096
 
+# Sidebar Temperature, Max Tokens, and Token Budget
+st.sidebar.header("Configuration Settings")
+temperature = st.sidebar.slider("Temperature", 0.0, 1.0, DEFAULT_TEMPERATURE, 0.05)
+max_tokens = st.sidebar.number_input("Max Tokens", min_value=1, max_value=4096, value=DEFAULT_MAX_TOKENS, step=1)
+token_budget = st.sidebar.number_input("Token Budget", min_value=1, max_value=4096, value=DEFAULT_TOKEN_BUDGET, step=1)
+
+# Sidebar Interview Type selection
+interview_type = st.sidebar.selectbox("Interview Type", ["Technical", "HR"], index=0)
+
 class ConversationManager:
-    def __init__(self, api_key=None, base_url=None, model=None, temperature=None, max_tokens=None, token_budget=None):
+    def __init__(self, api_key=None, base_url=None, model=None, temperature=None, max_tokens=None, token_budget=None, interview_type="Technical"):
         # Initialization
         if not api_key:
             api_key = DEFAULT_API_KEY
         if not base_url:
             base_url = DEFAULT_BASE_URL
-            
+
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model = model if model else DEFAULT_MODEL
         self.temperature = temperature if temperature else DEFAULT_TEMPERATURE
         self.max_tokens = max_tokens if max_tokens else DEFAULT_MAX_TOKENS
         self.token_budget = token_budget if token_budget else DEFAULT_TOKEN_BUDGET
-        self.system_message = "You are an interviewer, asking insightful questions based on the provided document. Ask the question one at a time as to not overwhelm the user."
+        self.interview_type = interview_type  # Set interview type
+        self.system_message = f"You are an {self.interview_type} interviewer, asking insightful questions based on the provided document. Ask the questions one at a time as to not overwhelm the user."
         self.conversation_history = [{"role": "system", "content": self.system_message}]
 
     def count_tokens(self, text):
@@ -43,7 +53,7 @@ class ConversationManager:
         except Exception as e:
             print(f"Error calculating total tokens used: {e}")
             return None
-    
+
     def enforce_token_budget(self):
         try:
             while self.total_tokens_used() > self.token_budget:
@@ -76,8 +86,10 @@ class ConversationManager:
         self.conversation_history.append({"role": "assistant", "content": ai_response})
 
         return ai_response
-    
+
     def reset_conversation_history(self):
+        # Update system message with interview type
+        self.system_message = f"You are an {self.interview_type} interviewer, asking insightful questions based on the provided document. Ask the questions one at a time as to not overwhelm the user."
         self.conversation_history = [{"role": "system", "content": self.system_message}]
 
 def get_instance_id():
@@ -99,7 +111,7 @@ def get_instance_id():
         return instance_id
     except requests.exceptions.RequestException:
         return "Instance ID not available (running locally or error in retrieval)"
-    
+
 # PDF Parsing Function
 def parse_pdf(file):
     """Extract text from a PDF file using PyMuPDF."""
@@ -118,9 +130,14 @@ st.write(f"**EC2 Instance ID**: {instance_id}")
 
 # Initialize the ConversationManager object
 if 'chat_manager' not in st.session_state:
-    st.session_state['chat_manager'] = ConversationManager()
+    st.session_state['chat_manager'] = ConversationManager(interview_type=interview_type)
 
 chat_manager = st.session_state['chat_manager']
+
+# Reset interview type if it changes
+if chat_manager.interview_type != interview_type:
+    chat_manager.interview_type = interview_type
+    chat_manager.reset_conversation_history()
 
 # Initialize conversation history in session state
 if 'conversation_history' not in st.session_state:
@@ -132,7 +149,7 @@ if uploaded_file:
     pdf_content = parse_pdf(uploaded_file)
     # Add PDF content to conversation history without displaying it
     chat_manager.conversation_history.append({
-        "role": "user", "content": f"Please analyze this content and act as an interviewer, the content is about me: {pdf_content}"
+        "role": "user", "content": f"Please analyze this content and act as an {interview_type} interviewer. The content is about me: {pdf_content}"
     })
     st.write("PDF content loaded. The chatbot is now ready to ask questions based on this document.")
 
@@ -148,3 +165,4 @@ for message in st.session_state['conversation_history']:
     if message["role"] != "system" and not message["content"].startswith("Please analyze this content"):
         with st.chat_message(message["role"]):
             st.write(message["content"])
+
