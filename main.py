@@ -6,7 +6,7 @@ import streamlit as st
 import fitz  # PyMuPDF for PDF handling
 
 # Default settings
-DEFAULT_API_KEY = "your_key"
+DEFAULT_API_KEY = "bca883168d18f9277ca70639f50eb1d5f8106a259c11c8c0e8bd3af2ddaffefa"
 DEFAULT_BASE_URL = "https://api.together.xyz/v1"
 DEFAULT_MODEL = "meta-llama/Llama-Vision-Free"
 DEFAULT_TEMPERATURE = 0.7
@@ -126,13 +126,39 @@ chat_manager = st.session_state['chat_manager']
 if 'conversation_history' not in st.session_state:
     st.session_state['conversation_history'] = chat_manager.conversation_history
 
+# st.sidebar.title("Interview Details")
+# Update the sidebar with a dropdown for interview type
+interview_type = st.sidebar.selectbox(
+    "Jenis Interview", 
+    options=["Custom", "HR Interview", "Technical Interview", "Technical Skill"],
+    index=0  # Default to "Custom"
+)
+
+# If the interview type is "Custom", allow the user to input their own type
+if interview_type == "Custom":
+    interview_type = st.sidebar.text_input("Masukkan Jenis Interview", placeholder="Misalnya: Coding Test")
+
+# Display the selected interview type
+st.sidebar.write(f"Selected Interview Type: {interview_type}")
+
+# # Jenis interview
+# interview_type = st.sidebar.text_input("Jenis Interview", placeholder="e.g., Technical Interview, HR Interview")
+
+# Job yang dilamar
+job_applied = st.sidebar.text_input("Job yang Dilamar", placeholder="e.g., Software Engineer")
+
+# Deskripsi kualifikasi yang dibutuhkan
+job_qualifications = st.sidebar.text_area("Deskripsi Kualifikasi", placeholder="Tuliskan kualifikasi yang diperlukan untuk posisi ini")
+
 # PDF Upload
 uploaded_file = st.file_uploader("Upload a PDF for interview content", type="pdf")
 if uploaded_file:
     pdf_content = parse_pdf(uploaded_file)
     # Add PDF content to conversation history without displaying it
     chat_manager.conversation_history.append({
-        "role": "user", "content": f"Please analyze this content and act as an interviewer, the content is about me: {pdf_content}"
+        "role": "user", "content": f"The interview type is '{interview_type}', for the job position '{job_applied}', "
+                   f"with the required qualifications as follows: {job_qualifications}. "
+                  f"and additional content from the PDF: {pdf_content}"
     })
     st.write("PDF content loaded. The chatbot is now ready to ask questions based on this document.")
 
@@ -142,9 +168,25 @@ user_input = st.chat_input("Write a message")
 if user_input:
     response = chat_manager.chat_completion(user_input)
     st.session_state['conversation_history'] = chat_manager.conversation_history
+# if st.button("Mulai Interview"):
+#     # Send the prompt to the chatbot to start the interview
+#     prompt = "Ayo kita mulai interviewnya"
+#     response = chat_manager.chat_completion(prompt)
+#     st.session_state['conversation_history'] = chat_manager.conversation_history
+if st.button("Mulai Interview"):
+    # Send the prompt to the chatbot to start the interview
+    prompt = f"Ayo kita mulai interviewnya! Jenis interview: {interview_type}"
+    response = chat_manager.chat_completion(prompt)
+    st.session_state['conversation_history'] = chat_manager.conversation_history
 
 # Display conversation history, excluding the system message
+# for message in st.session_state['conversation_history']:
+#     if message["role"] != "system" and not message["content"]:
+#         with st.chat_message(message["role"]):
+#             st.write(message["content"])
+
 for message in st.session_state['conversation_history']:
-    if message["role"] != "system" and not message["content"].startswith("Please analyze this content"):
+    # Menyembunyikan pesan konteks awal
+    if message["role"] != "system" and "The interview type is" not in message["content"]:
         with st.chat_message(message["role"]):
             st.write(message["content"])
