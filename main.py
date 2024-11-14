@@ -6,7 +6,7 @@ import streamlit as st
 import fitz  # PyMuPDF for PDF handling
 
 # Default settings
-DEFAULT_API_KEY = "bca883168d18f9277ca70639f50eb1d5f8106a259c11c8c0e8bd3af2ddaffefa"
+DEFAULT_API_KEY = "your key"
 DEFAULT_BASE_URL = "https://api.together.xyz/v1"
 DEFAULT_MODEL = "meta-llama/Llama-Vision-Free"
 DEFAULT_TEMPERATURE = 0.7
