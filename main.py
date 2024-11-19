@@ -6,12 +6,18 @@ import streamlit as st
 import fitz  # PyMuPDF for PDF handling
 
 # Default settings
-DEFAULT_API_KEY = "your key"
+DEFAULT_API_KEY = "your api key"
 DEFAULT_BASE_URL = "https://api.together.xyz/v1"
 DEFAULT_MODEL = "meta-llama/Llama-Vision-Free"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_TOKEN_BUDGET = 4096
+
+# Sidebar Temperature, Max Tokens, and Token Budget
+st.sidebar.header("Configuration Settings")
+temperature = st.sidebar.slider("Temperature", 0.0, 1.0, DEFAULT_TEMPERATURE, 0.05)
+max_tokens = st.sidebar.number_input("Max Tokens", min_value=1, max_value=4096, value=DEFAULT_MAX_TOKENS, step=1)
+token_budget = st.sidebar.number_input("Token Budget", min_value=1, max_value=4096, value=DEFAULT_TOKEN_BUDGET, step=1)
 
 class ConversationManager:
     def __init__(self, api_key=None, base_url=None, model=None, temperature=None, max_tokens=None, token_budget=None):
