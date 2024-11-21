@@ -258,7 +258,7 @@ def count_words(text):
 
 
 # Default settings
-DEFAULT_API_KEY = "your_token"
+DEFAULT_API_KEY = "your_key"
 DEFAULT_BASE_URL = "https://api.together.xyz/v1"
 DEFAULT_MODEL = "meta-llama/Llama-Vision-Free"
 DEFAULT_TEMPERATURE = 0.7
