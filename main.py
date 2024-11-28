@@ -3,7 +3,10 @@ import tiktoken
 import requests
 import os
 import streamlit as st
-import fitz  # PyMuPDF for PDF handling
+import fitz
+from dotenv import load_dotenv
+
+load_dotenv()
 from datetime import datetime
 import json
 import csv
@@ -50,8 +53,8 @@ TRANSLATIONS = {
         "conversation_summary": "Conversation Summary",
         "no_summary": "No conversation to summarize yet!",
         "response_settings": "Response Settings",
-        "word_limit": "Response Word Limit",
-        "word_limit_help": "Adjust the maximum number of words in the AI's responses",
+        "word_limit": "User's Message Word Limit",
+        "word_limit_help": "Adjust the maximum number of words in the user's input",
         "input_exceeds": "⚠️ Input exceeds word limit!"
     },
     "Bahasa Indonesia": {
@@ -258,13 +261,15 @@ def count_words(text):
 
 
 # Default settings
-DEFAULT_API_KEY = "bca883168d18f9277ca70639f50eb1d5f8106a259c11c8c0e8bd3af2ddaffefa"
+DEFAULT_API_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_BASE_URL = "https://api.together.xyz/v1"
 DEFAULT_MODEL = "meta-llama/Llama-Vision-Free"
+CODING_MODEL = "Qwen/Qwen2.5-Coder-32B-Instruct"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_TOKEN_BUDGET = 4096
 DEFAULT_WORD_LIMIT = 150
+
 
 class ConversationManager:
     def __init__(self, api_key=None, base_url=None, model=None, temperature=None, max_tokens=None, token_budget=None, word_limit=None):
@@ -279,7 +284,7 @@ class ConversationManager:
         self.max_tokens = max_tokens if max_tokens else DEFAULT_MAX_TOKENS
         self.token_budget = token_budget if token_budget else DEFAULT_TOKEN_BUDGET
         self.word_limit = word_limit if word_limit else DEFAULT_WORD_LIMIT  # Add this line
-        self.system_message = "You are an interviewer, asking insightful questions based on the provided document. Ask the question one at a time as to not overwhelm the user."
+        self.system_message = f"You are an interviewer, asking insightful questions based on the provided document. Ask the question one at a time as to not overwhelm the user."
         self.conversation_history = [{"role": "system", "content": self.system_message}]
 
     def update_word_limit(self, new_limit):
@@ -401,9 +406,6 @@ def filter_messages(messages):
 
 actual_messages = filter_messages(st.session_state['conversation_history'])
 
-### Streamlit code ###
-st.title("HireHelp")
-
 # Add language selector in the sidebar (place this at the top of the sidebar)
 if 'language' not in st.session_state:
     st.session_state['language'] = 'English'
@@ -417,10 +419,6 @@ language = st.sidebar.selectbox(
 
 # Get current language translations
 trans = TRANSLATIONS[language]
-
-# Display EC2 Instance ID
-instance_id = get_instance_id()
-st.write(f"**{trans['instance_id']}**: {instance_id}")
 
 # Update the interview type selection
 interview_type = st.sidebar.selectbox(
@@ -465,73 +463,7 @@ word_limit = st.sidebar.slider(
 # Add a container for word count warning in sidebar
 word_count_container = st.sidebar.container()
 
-# Add search options in sidebar
-st.sidebar.markdown(f"### {trans['search_options']}")
-case_sensitive = st.sidebar.checkbox(trans["case_sensitive"], False)
-whole_word = st.sidebar.checkbox(trans["match_whole_words"], False)
-search_query = st.sidebar.text_input(trans["search_in_conversation"])
 
-def highlight_text(text, search_term, case_sensitive=False, whole_word=False):
-    if not search_term:
-        return text
-    
-    # Escape special regex characters
-    escaped_term = re.escape(search_term)
-    
-    # Add word boundaries if whole word matching is enabled
-    if whole_word:
-        escaped_term = f"\\b{escaped_term}\\b"
-    
-    # Create pattern with appropriate flags
-    flags = 0 if case_sensitive else re.IGNORECASE
-    pattern = re.compile(f'({escaped_term})', flags)
-    
-    # Replace matches with highlighted version
-    highlighted_text = pattern.sub(r'**\1**', text)
-    return highlighted_text
-
-if search_query:
-    matching_messages = []
-    for msg in actual_messages:
-        # Adjust search based on case sensitivity
-        msg_content = msg['content'] if case_sensitive else msg['content'].lower()
-        search_term = search_query if case_sensitive else search_query.lower()
-            
-        if search_term in msg_content:
-            # Highlight the text with the selected options
-            highlighted_content = highlight_text(
-                msg['content'], 
-                search_query,
-                case_sensitive,
-                whole_word
-            )
-            formatted_msg = {
-                'role': msg['role'].upper(),
-                'content': highlighted_content
-            }
-            matching_messages.append(formatted_msg)
-    
-    if matching_messages:
-        st.sidebar.success(f"Found {len(matching_messages)} matches")
-        
-        # Add sort options
-        sort_order = st.sidebar.selectbox(
-            "Sort by",
-            ["Newest First", "Oldest First"]
-        )
-        
-        if sort_order == "Oldest First":
-            matching_messages = matching_messages[::-1]
-            
-        # Display results
-        search_container = st.sidebar.container()
-        with search_container:
-            for i, msg in enumerate(matching_messages, 1):
-                st.markdown(f"**Match {i} ({msg['role']}):**")
-                st.markdown(msg['content'])
-                st.markdown("---")
-    else:
-        st.sidebar.warning("No matches found")
 
 # Initialize the ConversationManager object
 if 'chat_manager' not in st.session_state:
@@ -640,24 +572,40 @@ if st.sidebar.button(trans["clear_conversation"]):
 
 if st.session_state.confirm_clear:
     st.sidebar.warning(trans["clear_confirm"])
-    col1, col2 = st.sidebar.columns(2)
-    
-    if col1.button(trans["yes"]):
-        st.session_state['conversation_history'] = []
-        chat_manager.reset_conversation()
-        st.session_state.confirm_clear = False
-        st.rerun()
+    col1, col2 = st.sidebar.columns([0.02, 0.06])  # Smaller columns and narrow gap
 
-    
-    if col2.button(trans["no"]):
-        st.session_state.confirm_clear = False
-        st.rerun()
+    with col1:
+        if st.button("Yes"):
+            st.session_state['conversation_history'] = []
+            chat_manager.reset_conversation()
+            st.session_state.confirm_clear = False
+            st.rerun()
 
-# Add conversation save/load feature
+    with col2:
+        if st.button("No"):
+            st.session_state.confirm_clear = False
+            st.rerun()
+
+
+
+# Save conversation with dynamic naming
 if st.sidebar.button(trans["save_conversation"]):
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    st.session_state[f'saved_conversation_{timestamp}'] = \
-        st.session_state['conversation_history'].copy()
+    if "conversation_history" in st.session_state and st.session_state["conversation_history"]:
+        # Generate the name dynamically
+        interview_type = st.session_state.get("interview_type", "UnknownType")
+        job_applied = st.session_state.get("job_applied", "UnknownPosition")
+        save_name = f"{interview_type}-{job_applied}".replace(" ", "_")
+
+        # Ensure uniqueness by adding a timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique_key = f"saved_conversation_{save_name}_{timestamp}"
+
+        # Save conversation in session state
+        st.session_state[unique_key] = st.session_state["conversation_history"].copy()
+        st.success(f"Conversation saved as: {save_name}")
+    else:
+        st.warning("No conversation available to save!")
+
 
 # Display and load saved conversations
 saved_conversations = [key for key in st.session_state.keys() 
@@ -672,88 +620,154 @@ if saved_conversations:
             st.session_state[selected_conversation].copy()
         st.rerun()  # Using st.rerun() instead of st.experimental_rerun()
 
-# Conversation Summary
-if st.sidebar.button(trans["generate_summary"]):
-    actual_conversation = []
-    # Create a temporary copy of conversation history to avoid modifying the original
-    temp_conversation = actual_messages.copy()
-    for msg in temp_conversation:
-        actual_conversation.append(f"{msg['role'].upper()}: {msg['content']}")
-    
-    if actual_conversation:
-        conversation_text = "\n".join(actual_conversation)
-        
-        # Create a separate completion call that won't be added to conversation history
-        summary_response = chat_manager.client.chat.completions.create(
-            model=chat_manager.model,
-            messages=[{
-                "role": "system",
-                "content": "You are a helpful assistant. Please provide a concise summary of the following conversation."
-            },
-            {
-                "role": "user",
-                "content": f"Please summarize this conversation:\n{conversation_text}. Also Give a score between 1-10 for interview readiness for the upcoming interview and the reason why you give that score based on USER answer in the conversation and also give some feedback so user can improve. Please respond in {language}."
-            }],
-            temperature=0.7,
-            max_tokens=250
-        )
-        
-        # Display summary in sidebar
-        st.sidebar.markdown(f"### {trans['conversation_summary']}")
-        st.sidebar.markdown(summary_response.choices[0].message.content)
+
+# Initialize button state
+if 'interview_started' not in st.session_state:
+    st.session_state['interview_started'] = False
+
+
+# Tabs for different sections
+tabs = st.tabs(["Chatbot", "Summary"])
+
+# Chatbot tab: Contains the chatbot UI
+with tabs[0]:
+    ### Streamlit code ###
+    st.title("HireHelp")
+
+    # Display EC2 Instance ID
+    instance_id = get_instance_id()
+    st.write(f"**{trans['instance_id']}**: {instance_id}")
+
+    # PDF Upload
+    uploaded_file = st.file_uploader("Upload your CV in PDF format", type="pdf")
+    if uploaded_file:
+        pdf_content = parse_pdf(uploaded_file)
+        st.session_state['pdf_loaded'] = True
+        st.write("✅ PDF uploaded successfully!")
     else:
-        st.sidebar.warning(trans["no_summary"])
+        st.session_state['pdf_loaded'] = False
 
-## PDF Upload
-uploaded_file = st.file_uploader(trans["upload_pdf"], type="pdf")
-if uploaded_file:
-    pdf_content = parse_pdf(uploaded_file)
-    
-    content_message = (
-        f"{trans['interview_type']}: '{interview_type}', "
-        f"{trans['job_applied']}: '{job_applied}', "
-        f"{trans['qualifications']}: {job_qualifications}. "
-        f"PDF content: {pdf_content}"
-    )
-    
-    # Add PDF content to conversation history with language instruction
-    chat_manager.conversation_history.append({
-        "role": "system",
-        "content": f"Please respond in {language}. Context: {content_message}"
-    })
-    st.write(trans["pdf_loaded"])
+    # Button to Start Interview
+    if st.button("Start Interview"):
+        if not uploaded_file:
+            st.warning("⚠️ Please upload your CV.")
+        elif not interview_type:
+            st.warning("⚠️ Please select or input interview type.")
+        elif not job_applied:
+            st.warning("⚠️ Please enter position you want to apply.")
+        else:
+            # Determine model and API key based on the interview type
+            if "coding" in interview_type.lower() or interview_type == "Technical Skill":
+                chat_manager.model = CODING_MODEL
+                chat_manager.client = OpenAI(api_key=DEFAULT_API_KEY, base_url=DEFAULT_BASE_URL)
+                chat_manager.max_tokens=1024
+                chat_manager.token_budget=8192
+                coding_prompt = (
+                    f"Let's start the Practical Coding interview. Ask question one by one. "
+                    f"You are an experienced coding interviewer. You can generate a code relevant to these information and ask the user the output "
+                    f"Or you can ask the user to make a code for task relevant to these information: "
+                    f"apply position: {job_applied}, job requirements: {job_qualifications}, "
+                    f"CV content: {pdf_content}. "
+                    f"Use {language} when asking and ask the questions one by one. "
+                    f"Do not ask more than 5 questions. At the end, give the user your judgement about their interview performance "
+                    f"and recommendations for improvement. Also, give a score in the scale of 1 to 10. Also, you don't have to explain the answer, just focus on asking. "
+                )
+                chat_manager.system_message = coding_prompt
+            else:
+                # Use default settings for other interview types
+                chat_manager.model = DEFAULT_MODEL
+                chat_manager.client = OpenAI(api_key=DEFAULT_API_KEY, base_url=DEFAULT_BASE_URL)
+                general_prompt = (
+                    f"Let's start the interview. Ask question one by one. "
+                    f"Ask questions based on these information: interview type: {interview_type}, "
+                    f"apply position: {job_applied}, job requirements: {job_qualifications}, "
+                    f"CV content: {pdf_content}. "
+                    f"Use {language} when asking and ask the questions one by one. "
+                    f"Do not ask more than 5 questions. At the end, give the user your judgement about their interview performance "
+                    f"and recommendations for improvement. Also, give a score in the scale of 1 to 10. "
+                )
+                chat_manager.system_message = general_prompt
 
-if st.button(trans["start_interview"]):
-    # Remove the empty check to always start when button is clicked
-    prompt = f"{trans['lets_start']}{interview_type}"
-    response = chat_manager.chat_completion(prompt)
-    st.session_state['conversation_history'] = chat_manager.conversation_history
-    st.rerun()  # Add this to refresh the UI
+            # Reset conversation history with the updated system message
+            chat_manager.reset_conversation_history()
+            st.session_state['conversation_history'] = chat_manager.conversation_history
 
-# Chat input with word limit check
-if prompt := st.chat_input(trans["chat_placeholder"], key="main_chat_input"):
-    word_count = count_words(prompt)
-    
-    # Check if input exceeds word limit
-    if word_count > word_limit:
-        # Show warning in sidebar
-        word_count_container.warning(f"{trans['input_exceeds']} ({word_count}/{word_limit} words)")
+            # Start the interview
+            st.session_state['interview_started'] = True
+            response = chat_manager.chat_completion(chat_manager.system_message)
+            st.session_state['conversation_history'] = chat_manager.conversation_history
+
+    # Display conversation history only if the interview has started
+    if st.session_state['interview_started']:
+        # Chat input with word limit check
+        # Chat history container
+        chat_history_container = st.container()
+
+        # User input container
+        user_input_container = st.container()
+
+        with chat_history_container:
+            # Render conversation history (skip the initial user prompt)
+            for i, message in enumerate(st.session_state['conversation_history']):
+                if message["role"] != "system" and not (
+                    i == 1 and message["role"] == "user"
+                ):  # Skip the first user message (initial prompt)
+                    with st.chat_message(message["role"]):
+                        st.write(message["content"])
+
+        with user_input_container:
+            # Chat input with word limit check
+            if user_input := st.chat_input(trans["chat_placeholder"], key="main_chat_input"):
+                word_count = count_words(user_input)
+
+                # Check if input exceeds word limit
+                if word_count > word_limit:
+                    st.warning(f"{trans['input_exceeds']} ({word_count}/{word_limit} words)")
+                else:
+                    # Add language instruction before each interaction if not already added
+                    if not any(
+                        msg["role"] == "system" and "Please respond in" in msg["content"]
+                        for msg in st.session_state['conversation_history']
+                    ):
+                        st.session_state['conversation_history'].append({
+                            "role": "system",
+                            "content": f"Please respond in {language}."
+                        })
+
+                    # Generate and update AI response
+                    response = chat_manager.chat_completion(user_input)
+                    st.session_state['conversation_history'] = chat_manager.conversation_history
+                    st.rerun()
     else:
-        # Add language instruction before each interaction
-        if not any(msg["role"] == "system" and "Please respond in" in msg["content"] 
-                  for msg in st.session_state['conversation_history']):
-            st.session_state['conversation_history'].append({
-                "role": "system",
-                "content": f"Please respond in {language}."
-            })
-        
-        # Generate and display AI response
-        response = chat_manager.chat_completion(prompt)
-        st.session_state['conversation_history'] = chat_manager.conversation_history
-        st.rerun()
+        st.write("🔒 Chatbot can only be accessed after you start the interview.")
+    
 
-# Display conversation
-actual_messages = filter_messages(st.session_state['conversation_history'])
-for message in actual_messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
+# Summary tab: Contains the conversation summary
+with tabs[1]:
+    st.header(trans["conversation_summary"])
+    
+    # Button to generate the summary
+    if st.button(trans["generate_summary"]):
+        if actual_messages:  # Check if there is a conversation to summarize
+            conversation_text = "\n".join(
+                [f"{msg['role'].upper()}: {msg['content']}" for msg in actual_messages]
+            )
+            try:
+                summary_response = chat_manager.client.chat.completions.create(
+                    model=chat_manager.model,
+                    messages=[{
+                        "role": "system",
+                        "content": "You are a helpful assistant. Please provide a concise summary of the following conversation."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Please summarize this conversation:\n{conversation_text}. Please respond in {language}."
+                    }],
+                    temperature=0.7,
+                    max_tokens=250
+                )
+                st.markdown(summary_response.choices[0].message.content)
+            except Exception as e:
+                st.warning("⚠️ Failed to generate summary. Please try again.")
+        else:
+            st.warning("⚠️ No conversation to summarize yet!")
