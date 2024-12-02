@@ -668,7 +668,7 @@ with tabs[0]:
                     f"Or you can ask the user to make a code for task relevant to these information: "
                     f"apply position: {job_applied}, job requirements: {job_qualifications}, "
                     f"CV content: {pdf_content}. "
-                    f"Use {language} when asking and ask the questions one by one. "
+                    f"Use {language} when asking and ask the questions one by one, don't ask all 5 questions at once. "
                     f"Do not ask more than 5 questions. At the end, give the user your judgement about their interview performance "
                     f"and recommendations for improvement. Also, give a score in the scale of 1 to 10. Also, you don't have to explain the answer, just focus on asking. "
                 )
@@ -682,7 +682,7 @@ with tabs[0]:
                     f"Ask questions based on these information: interview type: {interview_type}, "
                     f"apply position: {job_applied}, job requirements: {job_qualifications}, "
                     f"CV content: {pdf_content}. "
-                    f"Use {language} when asking and ask the questions one by one. "
+                    f"Use {language} when asking and ask the questions one by one, don't ask all 5 questions at once. "
                     f"Do not ask more than 5 questions. At the end, give the user your judgement about their interview performance "
                     f"and recommendations for improvement. Also, give a score in the scale of 1 to 10. "
                 )
